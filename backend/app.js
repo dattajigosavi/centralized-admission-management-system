@@ -49,6 +49,34 @@ const assignments = [
     }
 ];
 
+// Temporary call log data (like CALL_LOGS sheet)
+const callLogs = [
+    {
+        call_id: 1,
+        student_id: 1,
+        teacher: "Teacher A",
+        unit: "Engineering",
+        call_status: "Completed",
+        remarks: "Interested, asked for brochure"
+    },
+    {
+        call_id: 2,
+        student_id: 2,
+        teacher: "Teacher B",
+        unit: "Law",
+        call_status: "Not Connected",
+        remarks: "Phone switched off"
+    },
+    {
+        call_id: 3,
+        student_id: 3,
+        teacher: "Teacher C",
+        unit: "Nursing",
+        call_status: "Completed",
+        remarks: "Follow-up required"
+    }
+];
+
 
 // This route runs when someone opens the root URL
 app.get("/", (req, res) => {
@@ -63,6 +91,11 @@ app.get("/students", (req, res) => {
 // API to get all assignments (calls assigned)
 app.get("/assignments", (req, res) => {
     res.json(assignments);
+});
+
+// API to get all call logs (calls made by teachers)
+app.get("/call-logs", (req, res) => {
+    res.json(callLogs);
 });
 
 
