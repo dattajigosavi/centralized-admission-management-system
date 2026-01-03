@@ -98,6 +98,78 @@ app.get("/call-logs", (req, res) => {
     res.json(callLogs);
 });
 
+// API to get dashboard summary
+app.get("/dashboard-summary", (req, res) => {
+
+    // Total calls assigned
+    const totalAssigned = assignments.length;
+
+    // Calls completed
+    const completedCalls = callLogs.filter(
+        log => log.call_status === "Completed"
+    ).length;
+
+    // Pending calls
+    const pendingCalls = totalAssigned - completedCalls;
+
+    // Unit-wise summary
+    const unitSummary = {};
+
+    assignments.forEach(assign => {
+        const unit = assign.unit;
+
+        if (!unitSummary[unit]) {
+            unitSummary[unit] = {
+                assigned: 0,
+                completed: 0
+            };
+        }
+
+        unitSummary[unit].assigned += 1;
+    });
+
+    callLogs.forEach(log => {
+        if (log.call_status === "Completed") {
+            if (unitSummary[log.unit]) {
+                unitSummary[log.unit].completed += 1;
+            }
+        }
+    });
+
+    // Teacher-wise summary
+    const teacherSummary = {};
+
+    assignments.forEach(assign => {
+        const teacher = assign.teacher;
+
+        if (!teacherSummary[teacher]) {
+            teacherSummary[teacher] = {
+                assigned: 0,
+                completed: 0
+            };
+        }
+
+        teacherSummary[teacher].assigned += 1;
+    });
+
+    callLogs.forEach(log => {
+        if (log.call_status === "Completed") {
+            if (teacherSummary[log.teacher]) {
+                teacherSummary[log.teacher].completed += 1;
+            }
+        }
+    });
+
+    // Final response
+    res.json({
+        total_calls_assigned: totalAssigned,
+        calls_completed: completedCalls,
+        pending_calls: pendingCalls,
+        unit_summary: unitSummary,
+        teacher_summary: teacherSummary
+    });
+});
+
 
 // Start the server
 const PORT = 3000;
