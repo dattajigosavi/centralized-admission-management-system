@@ -1,0 +1,22 @@
+{
+  "name": "centralized-admission-management-system-main",
+  "version": "1.0.0",
+  "description": "This project manages bulk student data, call assignments, automatic unit routing, and role-based dashboards for teachers, local admins, and central admin.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "pg": "^8.16.3"
+  }
+}

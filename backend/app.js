@@ -2,229 +2,233 @@
 // Main server file for Centralized Admission Management System
 
 const express = require("express");
+const cors = require("cors");
+const bcrypt = require("bcrypt");
+const { Pool } = require("pg");
+
 const app = express();
+app.use(cors());
+app.use(express.json());
 
-// Temporary student data (like Google Sheets)
-const students = [
-    {
-        student_id: 1,
-        name: "Rahul Patil",
-        mobile: "9876543210",
-        preferred_branch: "B.Tech Engineering",
-        assigned_unit: "Engineering",
-        status: "New"
-    },
-    {
-        student_id: 2,
-        name: "Sneha Joshi",
-        mobile: "9123456789",
-        preferred_branch: "LLB",
-        assigned_unit: "Law",
-        status: "Called"
-    }
-];
+/* =========================
+   DATABASE CONNECTION
+========================= */
+const pool = new Pool(
+  process.env.DATABASE_URL
+    ? {
+        connectionString: process.env.DATABASE_URL,
+        ssl: { rejectUnauthorized: false } // Cloud only
+      }
+    : {
+        user: "postgres",
+        host: "localhost",
+        database: "admission_system",
+        password: "postgres123", // your local DB password
+        port: 5432
+      }
+);
 
-// Temporary assignment data (like ASSIGNMENTS sheet)
-const assignments = [
-    {
-        assignment_id: 1,
-        student_id: 1,
-        teacher: "Teacher A",
-        unit: "Engineering",
-        status: "Active"
-    },
-    {
-        assignment_id: 2,
-        student_id: 2,
-        teacher: "Teacher B",
-        unit: "Law",
-        status: "Active"
-    },
-    {
-        assignment_id: 3,
-        student_id: 3,
-        teacher: "Teacher C",
-        unit: "Nursing",
-        status: "Active"
-    }
-];
-
-// Temporary call log data (like CALL_LOGS sheet)
-const callLogs = [
-    {
-        call_id: 1,
-        student_id: 1,
-        teacher: "Teacher A",
-        unit: "Engineering",
-        call_status: "Completed",
-        remarks: "Interested, asked for brochure"
-    },
-    {
-        call_id: 2,
-        student_id: 2,
-        teacher: "Teacher B",
-        unit: "Law",
-        call_status: "Not Connected",
-        remarks: "Phone switched off"
-    },
-    {
-        call_id: 3,
-        student_id: 3,
-        teacher: "Teacher C",
-        unit: "Nursing",
-        call_status: "Completed",
-        remarks: "Follow-up required"
-    }
-];
-
-
-// This route runs when someone opens the root URL
+/* =========================
+   TEST ROUTE
+========================= */
 app.get("/", (req, res) => {
-    res.send("Admission Management Backend is running");
+  res.send("Admission Management Backend is running");
 });
 
-// API to get all students
-app.get("/students", (req, res) => {
-    res.json(students);
+/* =========================
+   STUDENTS
+========================= */
+app.get("/students", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM students");
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Database error");
+  }
 });
 
-// API to get all assignments (calls assigned)
-app.get("/assignments", (req, res) => {
-    res.json(assignments);
+/* =========================
+   ASSIGNMENTS
+========================= */
+app.get("/assignments", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM assignments");
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Database error");
+  }
 });
 
-// API to get all call logs (calls made by teachers)
-app.get("/call-logs", (req, res) => {
-    res.json(callLogs);
+/* =========================
+   CALL LOGS
+========================= */
+app.get("/call-logs", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM call_logs");
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Database error");
+  }
 });
 
-// API to get dashboard summary
-app.get("/dashboard-summary", (req, res) => {
+/* =========================
+   DASHBOARD SUMMARY
+========================= */
+app.get("/dashboard-summary", async (req, res) => {
+  try {
+    const assignedRes = await pool.query("SELECT COUNT(*) FROM assignments");
+    const completedRes = await pool.query(
+      "SELECT COUNT(*) FROM call_logs WHERE call_status='Completed'"
+    );
 
-    // Total calls assigned
-    const totalAssigned = assignments.length;
-
-    // Calls completed
-    const completedCalls = callLogs.filter(
-        log => log.call_status === "Completed"
-    ).length;
-
-    // Pending calls
+    const totalAssigned = parseInt(assignedRes.rows[0].count);
+    const completedCalls = parseInt(completedRes.rows[0].count);
     const pendingCalls = totalAssigned - completedCalls;
 
-    // Unit-wise summary
-    const unitSummary = {};
+    const unitSummaryRes = await pool.query(`
+      SELECT unit,
+             COUNT(*) AS assigned,
+             COUNT(CASE WHEN call_status='Completed' THEN 1 END) AS completed
+      FROM assignments
+      LEFT JOIN call_logs USING (student_id, unit)
+      GROUP BY unit
+    `);
 
-    assignments.forEach(assign => {
-        const unit = assign.unit;
-
-        if (!unitSummary[unit]) {
-            unitSummary[unit] = {
-                assigned: 0,
-                completed: 0
-            };
-        }
-
-        unitSummary[unit].assigned += 1;
-    });
-
-    callLogs.forEach(log => {
-        if (log.call_status === "Completed") {
-            if (unitSummary[log.unit]) {
-                unitSummary[log.unit].completed += 1;
-            }
-        }
-    });
-
-    // Teacher-wise summary
-    const teacherSummary = {};
-
-    assignments.forEach(assign => {
-        const teacher = assign.teacher;
-
-        if (!teacherSummary[teacher]) {
-            teacherSummary[teacher] = {
-                assigned: 0,
-                completed: 0
-            };
-        }
-
-        teacherSummary[teacher].assigned += 1;
-    });
-
-    callLogs.forEach(log => {
-        if (log.call_status === "Completed") {
-            if (teacherSummary[log.teacher]) {
-                teacherSummary[log.teacher].completed += 1;
-            }
-        }
-    });
-
-    // Final response
-    res.json({
-        total_calls_assigned: totalAssigned,
-        calls_completed: completedCalls,
-        pending_calls: pendingCalls,
-        unit_summary: unitSummary,
-        teacher_summary: teacherSummary
-    });
-});
-
-// Teacher-specific dashboard
-app.get("/dashboard/teacher/:teacherName", (req, res) => {
-
-    const teacherName = req.params.teacherName;
-
-    // Calls assigned to this teacher
-    const assigned = assignments.filter(
-        a => a.teacher === teacherName
-    ).length;
-
-    // Calls completed by this teacher
-    const completed = callLogs.filter(
-        log => log.teacher === teacherName && log.call_status === "Completed"
-    ).length;
-
-    // Pending calls
-    const pending = assigned - completed;
+    const teacherSummaryRes = await pool.query(`
+      SELECT teacher,
+             COUNT(*) AS assigned,
+             COUNT(CASE WHEN call_status='Completed' THEN 1 END) AS completed
+      FROM assignments
+      LEFT JOIN call_logs USING (student_id, teacher)
+      GROUP BY teacher
+    `);
 
     res.json({
-        teacher: teacherName,
-        calls_assigned: assigned,
-        calls_completed: completed,
-        pending_calls: pending
+      total_calls_assigned: totalAssigned,
+      calls_completed: completedCalls,
+      pending_calls: pendingCalls,
+      unit_summary: unitSummaryRes.rows,
+      teacher_summary: teacherSummaryRes.rows
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Dashboard error");
+  }
 });
 
-// Unit-specific dashboard (Local Admin)
-app.get("/dashboard/unit/:unitName", (req, res) => {
+/* =========================
+   TEACHER – ASSIGNED STUDENTS
+========================= */
+app.get("/teacher/students", async (req, res) => {
+  const teacher = req.query.teacher;
 
-    const unitName = req.params.unitName;
+  try {
+    const result = await pool.query(
+      `
+      SELECT s.student_id, s.name, s.mobile, s.preferred_branch, s.status
+      FROM students s
+      JOIN assignments a ON s.student_id = a.student_id
+      WHERE a.teacher = $1
+      `,
+      [teacher]
+    );
 
-    // Calls assigned in this unit
-    const assigned = assignments.filter(
-        a => a.unit === unitName
-    ).length;
-
-    // Calls completed in this unit
-    const completed = callLogs.filter(
-        log => log.unit === unitName && log.call_status === "Completed"
-    ).length;
-
-    // Pending calls
-    const pending = assigned - completed;
-
-    res.json({
-        unit: unitName,
-        calls_assigned: assigned,
-        calls_completed: completed,
-        pending_calls: pending
-    });
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error fetching teacher students");
+  }
 });
 
+/* =========================
+   CALL UPDATE
+========================= */
+app.post("/call-update", async (req, res) => {
+  const { student_id, teacher, unit, call_status, remarks } = req.body;
 
-// Start the server
-const PORT = 3000;
+  try {
+    await pool.query(
+      `
+      INSERT INTO call_logs (student_id, teacher, unit, call_status, remarks)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [student_id, teacher, unit, call_status, remarks]
+    );
+
+    await pool.query(
+      "UPDATE students SET status = $1 WHERE student_id = $2",
+      [call_status, student_id]
+    );
+
+    res.json({ message: "Call updated successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error saving call update");
+  }
+});
+
+/* =========================
+   LOGIN (bcrypt)
+========================= */
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      "SELECT user_id, username, password, role, teacher_name, unit FROM users WHERE username=$1",
+      [username]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    delete user.password;
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Login error" });
+  }
+});
+
+/* =========================
+   CREATE USER (PASSWORD HASHED)
+========================= */
+app.post("/users", async (req, res) => {
+  const { username, password, role, teacher_name, unit } = req.body;
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      `
+      INSERT INTO users (username, password, role, teacher_name, unit)
+      VALUES ($1, $2, $3, $4, $5)
+      `,
+      [username, hashedPassword, role, teacher_name || null, unit || null]
+    );
+
+    res.json({ message: "User created successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error creating user" });
+  }
+});
+
+/* =========================
+   START SERVER
+========================= */
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log("Server started on port " + PORT);
+  console.log(`Server started on port ${PORT}`);
 });
