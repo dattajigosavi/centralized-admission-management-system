@@ -170,6 +170,58 @@ app.get("/dashboard-summary", (req, res) => {
     });
 });
 
+// Teacher-specific dashboard
+app.get("/dashboard/teacher/:teacherName", (req, res) => {
+
+    const teacherName = req.params.teacherName;
+
+    // Calls assigned to this teacher
+    const assigned = assignments.filter(
+        a => a.teacher === teacherName
+    ).length;
+
+    // Calls completed by this teacher
+    const completed = callLogs.filter(
+        log => log.teacher === teacherName && log.call_status === "Completed"
+    ).length;
+
+    // Pending calls
+    const pending = assigned - completed;
+
+    res.json({
+        teacher: teacherName,
+        calls_assigned: assigned,
+        calls_completed: completed,
+        pending_calls: pending
+    });
+});
+
+// Unit-specific dashboard (Local Admin)
+app.get("/dashboard/unit/:unitName", (req, res) => {
+
+    const unitName = req.params.unitName;
+
+    // Calls assigned in this unit
+    const assigned = assignments.filter(
+        a => a.unit === unitName
+    ).length;
+
+    // Calls completed in this unit
+    const completed = callLogs.filter(
+        log => log.unit === unitName && log.call_status === "Completed"
+    ).length;
+
+    // Pending calls
+    const pending = assigned - completed;
+
+    res.json({
+        unit: unitName,
+        calls_assigned: assigned,
+        calls_completed: completed,
+        pending_calls: pending
+    });
+});
+
 
 // Start the server
 const PORT = 3000;
