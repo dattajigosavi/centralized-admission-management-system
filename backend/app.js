@@ -413,6 +413,7 @@ app.get("/admin/reassignment-queue", async (req, res) => {
       SELECT
         s.student_id,
         s.name,
+		s.mobile,
         s.preferred_unit,
         a.unit AS assigned_unit,
         a.teacher
@@ -423,6 +424,7 @@ app.get("/admin/reassignment-queue", async (req, res) => {
 
     res.json(result.rows);
   } catch (err) {
+	   console.error(err);
     res.status(500).json({ message: "Error fetching reassignment queue" });
   }
 });
@@ -451,6 +453,7 @@ app.put("/admin/reassign-student", async (req, res) => {
 
     res.json({ message: "Student reassigned successfully" });
   } catch (err) {
+	  console.error(err);
     res.status(500).json({ message: "Reassignment failed" });
   }
 });
