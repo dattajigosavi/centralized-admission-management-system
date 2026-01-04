@@ -133,6 +133,23 @@ app.get("/users", async (req, res) => {
   }
 });
 
+
+// Disabled user instantly logged out
+app.get("/login-check", async (req, res) => {
+  const username = req.headers["x-username"];
+
+  const result = await pool.query(
+    "SELECT is_active FROM users WHERE username=$1",
+    [username]
+  );
+
+  if (!result.rows[0] || result.rows[0].is_active === false) {
+    return res.sendStatus(403);
+  }
+
+  res.sendStatus(200);
+});
+
 // ENABLE / DISABLE USER
 app.put("/users/:id/status", async (req, res) => {
   const { is_active } = req.body;
