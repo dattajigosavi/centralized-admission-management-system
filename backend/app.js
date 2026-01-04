@@ -47,6 +47,60 @@ const logAudit = async (action, performedBy, role, target = null) => {
   }
 };
 
+/* =========================
+   For csv upload
+========================= */
+
+const multer = require("multer");
+const csv = require("csv-parser");
+const fs = require("fs");
+
+const upload = multer({ dest: "uploads/" });
+
+app.post("/students/import", upload.single("file"), async (req, res) => {
+  const results = [];
+
+  try {
+    fs.createReadStream(req.file.path)
+      .pipe(csv())
+      .on("data", (data) => results.push(data))
+      .on("end", async () => {
+        for (const row of results) {
+          if (!row.name || !row.mobile) continue;
+
+          await pool.query(
+            `
+            INSERT INTO students (name, mobile, address, preferred_branch)
+            VALUES ($1, $2, $3, $4)
+            `,
+            [
+              row.name,
+              row.mobile,
+              row.address || null,
+              row.preferred_branch || null
+            ]
+          );
+        }
+
+        await logAudit(
+          "CSV_IMPORT_STUDENTS",
+          "SUPER_ADMIN",
+          "SUPER_ADMIN",
+          `${results.length} rows`
+        );
+
+        res.json({
+          message: "Students imported successfully",
+          count: results.length
+        });
+      });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "CSV import failed" });
+  }
+});
+
+
 
 /* =========================
    TEST ROUTE
