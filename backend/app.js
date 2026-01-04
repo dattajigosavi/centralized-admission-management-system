@@ -377,6 +377,85 @@ app.get("/teacher/students", async (req, res) => {
   }
 });
 
+
+// Teacher updates preferred unit (interest only)
+app.put("/student/preferred-unit", async (req, res) => {
+  const { student_id, preferred_unit, teacher } = req.body;
+
+  try {
+    await pool.query(
+      `
+      UPDATE students
+      SET preferred_unit = $1
+      WHERE student_id = $2
+      `,
+      [preferred_unit, student_id]
+    );
+
+    await logAudit(
+      "PREFERRED_UNIT_CHANGED",
+      teacher,
+      "TEACHER",
+      `student_id:${student_id} -> ${preferred_unit}`
+    );
+
+    res.json({ message: "Preferred unit updated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error updating preferred unit" });
+  }
+});
+
+// Students whose interest changed (need reassignment)
+app.get("/admin/reassignment-queue", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        s.student_id,
+        s.name,
+        s.preferred_unit,
+        a.unit AS assigned_unit,
+        a.teacher
+      FROM students s
+      JOIN assignments a ON s.student_id = a.student_id
+      WHERE s.preferred_unit <> a.unit
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ message: "Error fetching reassignment queue" });
+  }
+});
+
+// Reassign student
+app.put("/admin/reassign-student", async (req, res) => {
+  const { student_id, new_unit, new_teacher, admin } = req.body;
+
+  try {
+    await pool.query(
+      `
+      UPDATE assignments
+      SET unit = $1,
+          teacher = $2
+      WHERE student_id = $3
+      `,
+      [new_unit, new_teacher || null, student_id]
+    );
+
+    await logAudit(
+      "STUDENT_REASSIGNED",
+      admin,
+      "SUPER_ADMIN",
+      `student_id:${student_id} -> ${new_unit}`
+    );
+
+    res.json({ message: "Student reassigned successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Reassignment failed" });
+  }
+});
+
+
 /* =========================
    CALL UPDATE
 ========================= */
