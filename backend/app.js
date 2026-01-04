@@ -381,7 +381,7 @@ app.get("/teacher/students", async (req, res) => {
    CALL UPDATE
 ========================= */
 app.post("/call-update", async (req, res) => {
-	console.log("CALL UPDATE BODY:", req.body);
+  console.log("CALL UPDATE BODY:", req.body);
 
   const { student_id, teacher, unit, call_status, remarks, address } = req.body;
 
@@ -398,58 +398,39 @@ app.post("/call-update", async (req, res) => {
 
     const currentStatus = studentRes.rows[0].status;
 
-    // 2️⃣ Block duplicate completion
-    if (currentStatus === "Completed" && call_status === "Completed") {
-      return res.status(400).json({
-        message: "Student already completed. Duplicate update blocked."
-      });
+    // 2️⃣ Determine FINAL status safely
+    const finalStatus =
+      currentStatus === "Completed"
+        ? "Completed"
+        : call_status;
+
+    if (!finalStatus) {
+      return res.status(400).json({ message: "Invalid call status" });
     }
 
-    // 3️⃣ Insert call log (always)
+    // 3️⃣ Insert call log (history)
     await pool.query(
       `
       INSERT INTO call_logs (student_id, teacher, unit, call_status, remarks)
       VALUES ($1, $2, $3, $4, $5)
       `,
-      [student_id, teacher, unit, call_status, remarks || null]
+      [student_id, teacher, unit, finalStatus, remarks || null]
     );
 
-	//temp
-	console.log("UPDATING STUDENT:", {
-	  student_id,
-	  call_status,
-	  address
-	});
+    // 4️⃣ Update student (status once, address always)
+    const result = await pool.query(
+      `
+      UPDATE students
+      SET
+        status = $1,
+        address = COALESCE($2, address)
+      WHERE student_id = $3
+      RETURNING student_id, status, address
+      `,
+      [finalStatus, address || null, student_id]
+    );
 
-
-    // 4️⃣ Update student (status + address if provided)
-    await pool.query(
-	  `
-	  UPDATE students
-	  SET
-		status = $1,
-		address = COALESCE($2, address)
-	  WHERE student_id = $3
-	  `,
-	  [call_status, address || null, student_id]
-	);
-	
-	//temp
-	const result = await pool.query(
-	  `
-	  UPDATE students
-	  SET
-		status = $1,
-		address = COALESCE($2, address)
-	  WHERE student_id = $3
-	  RETURNING student_id, status, address
-	  `,
-	  [call_status, address || null, student_id]
-	);
-
-	console.log("UPDATE RESULT:", result.rows);
-
-
+    console.log("UPDATE RESULT:", result.rows);
 
     // 5️⃣ Audit log
     await logAudit(
