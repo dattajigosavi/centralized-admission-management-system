@@ -188,6 +188,32 @@ app.put("/users/:id/status", async (req, res) => {
   }
 });
 
+// RESET USER PASSWORD (SUPER ADMIN)
+app.put("/users/:id/reset-password", async (req, res) => {
+  const userId = req.params.id;
+  const { newPassword } = req.body;
+
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({
+      message: "Password must be at least 6 characters"
+    });
+  }
+
+  try {
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await pool.query(
+      "UPDATE users SET password=$1 WHERE user_id=$2",
+      [hashedPassword, userId]
+    );
+
+    res.json({ message: "Password reset successful" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Password reset failed" });
+  }
+});
 
 
 /* =========================
