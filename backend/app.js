@@ -54,6 +54,9 @@ const logAudit = async (action, performedBy, role, target = null) => {
 const upload = multer({ dest: "uploads/" });
 
 app.post("/students/import", upload.single("file"), async (req, res) => {
+	if (!req.file) {
+		return res.status(400).json({ message: "No file uploaded" });
+	  }
   const results = [];
 
   try {
@@ -97,6 +100,9 @@ app.post("/students/import", upload.single("file"), async (req, res) => {
    CSV IMPORT (Users)
 ========================= */
 app.post("/users/import", upload.single("file"), async (req, res) => {
+	if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded" });
+  }
   const users = [];
 
   try {
