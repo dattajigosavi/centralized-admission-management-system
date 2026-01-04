@@ -429,6 +429,30 @@ app.get("/admin/reassignment-queue", async (req, res) => {
   }
 });
 
+// Get teachers by unit
+app.get("/admin/teachers-by-unit/:unit", async (req, res) => {
+  const unit = req.params.unit;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT user_id, teacher_name
+      FROM users
+      WHERE role = 'TEACHER'
+        AND unit = $1
+        AND is_active = true
+      `,
+      [unit]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error fetching teachers" });
+  }
+});
+
+
 // Reassign student
 app.put("/admin/reassign-student", async (req, res) => {
   const { student_id, new_unit, new_teacher, admin } = req.body;
