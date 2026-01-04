@@ -384,33 +384,51 @@ app.post("/call-update", async (req, res) => {
   const { student_id, teacher, unit, call_status, remarks } = req.body;
 
   try {
+    // 1️⃣ Check current student status
+    const statusRes = await pool.query(
+      "SELECT status FROM students WHERE student_id = $1",
+      [student_id]
+    );
+
+    if (statusRes.rows.length === 0) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const currentStatus = statusRes.rows[0].status;
+
+    // 2️⃣ BLOCK double completion
+    if (currentStatus === "Completed") {
+      return res.status(400).json({
+        message: "Student already completed. Duplicate update blocked."
+      });
+    }
+
+    // 3️⃣ Insert call log (history)
     await pool.query(
       `
       INSERT INTO call_logs (student_id, teacher, unit, call_status, remarks)
       VALUES ($1, $2, $3, $4, $5)
       `,
-      [student_id, teacher, unit, call_status, remarks]
+      [student_id, teacher, unit, call_status, remarks || null]
     );
 
+    // 4️⃣ Update student status ONLY ONCE
     await pool.query(
-      "UPDATE students SET status = $1 WHERE student_id = $2",
+      `
+      UPDATE students
+      SET status = $1
+      WHERE student_id = $2
+      `,
       [call_status, student_id]
     );
 
-	await logAudit(
-	  "CALL_UPDATE",
-	  teacher,
-	  "TEACHER",
-	  `student_id:${student_id}`
-	);
-
-
-    res.json({ message: "Call updated successfully" });
+    res.json({ message: "Call update saved successfully" });
   } catch (err) {
     console.error(err);
-    res.status(500).send("Error saving call update");
+    res.status(500).json({ message: "Error saving call update" });
   }
 });
+
 
 /* =========================
    LOGIN (bcrypt)
