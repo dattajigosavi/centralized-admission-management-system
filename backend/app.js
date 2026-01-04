@@ -414,6 +414,14 @@ app.post("/call-update", async (req, res) => {
       [student_id, teacher, unit, call_status, remarks || null]
     );
 
+	//temp
+	console.log("UPDATING STUDENT:", {
+	  student_id,
+	  call_status,
+	  address
+	});
+
+
     // 4️⃣ Update student (status + address if provided)
     await pool.query(
 	  `
@@ -425,6 +433,22 @@ app.post("/call-update", async (req, res) => {
 	  `,
 	  [call_status, address || null, student_id]
 	);
+	
+	//temp
+	const result = await pool.query(
+	  `
+	  UPDATE students
+	  SET
+		status = $1,
+		address = COALESCE($2, address)
+	  WHERE student_id = $3
+	  RETURNING student_id, status, address
+	  `,
+	  [call_status, address || null, student_id]
+	);
+
+	console.log("UPDATE RESULT:", result.rows);
+
 
 
     // 5️⃣ Audit log
