@@ -414,15 +414,16 @@ app.post("/call-update", async (req, res) => {
 
     // 4️⃣ Update student (status + address if provided)
     await pool.query(
-      `
-      UPDATE students
-      SET
-        status = COALESCE($1, status),
-        address = COALESCE($2, address)
-      WHERE student_id = $3
-      `,
-      [call_status, address || null, student_id]
-    );
+	  `
+	  UPDATE students
+	  SET
+		status = $1,
+		address = COALESCE($2, address)
+	  WHERE student_id = $3
+	  `,
+	  [call_status, address || null, student_id]
+	);
+
 
     // 5️⃣ Audit log
     await logAudit(
