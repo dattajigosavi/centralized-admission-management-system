@@ -381,29 +381,29 @@ app.get("/teacher/students", async (req, res) => {
    CALL UPDATE
 ========================= */
 app.post("/call-update", async (req, res) => {
-  const { student_id, teacher, unit, call_status, remarks } = req.body;
+  const { student_id, teacher, unit, call_status, remarks, address } = req.body;
 
   try {
-    // 1️⃣ Check current student status
-    const statusRes = await pool.query(
+    // 1️⃣ Fetch current student
+    const studentRes = await pool.query(
       "SELECT status FROM students WHERE student_id = $1",
       [student_id]
     );
 
-    if (statusRes.rows.length === 0) {
+    if (studentRes.rows.length === 0) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const currentStatus = statusRes.rows[0].status;
+    const currentStatus = studentRes.rows[0].status;
 
-    // 2️⃣ BLOCK double completion
-    if (currentStatus === "Completed") {
+    // 2️⃣ Block duplicate completion
+    if (currentStatus === "Completed" && call_status === "Completed") {
       return res.status(400).json({
         message: "Student already completed. Duplicate update blocked."
       });
     }
 
-    // 3️⃣ Insert call log (history)
+    // 3️⃣ Insert call log (always)
     await pool.query(
       `
       INSERT INTO call_logs (student_id, teacher, unit, call_status, remarks)
@@ -412,14 +412,24 @@ app.post("/call-update", async (req, res) => {
       [student_id, teacher, unit, call_status, remarks || null]
     );
 
-    // 4️⃣ Update student status ONLY ONCE
+    // 4️⃣ Update student (status + address if provided)
     await pool.query(
       `
       UPDATE students
-      SET status = $1
-      WHERE student_id = $2
+      SET
+        status = COALESCE($1, status),
+        address = COALESCE($2, address)
+      WHERE student_id = $3
       `,
-      [call_status, student_id]
+      [call_status, address || null, student_id]
+    );
+
+    // 5️⃣ Audit log
+    await logAudit(
+      "CALL_UPDATE",
+      teacher,
+      "TEACHER",
+      `student_id:${student_id}`
     );
 
     res.json({ message: "Call update saved successfully" });
@@ -428,6 +438,8 @@ app.post("/call-update", async (req, res) => {
     res.status(500).json({ message: "Error saving call update" });
   }
 });
+
+
 
 
 /* =========================
