@@ -119,6 +119,39 @@ app.get("/dashboard-summary", async (req, res) => {
   }
 });
 
+
+// GET ALL USERS (SUPER ADMIN)
+app.get("/users", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT user_id, username, role, teacher_name, unit, is_active FROM users ORDER BY user_id"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error fetching users" });
+  }
+});
+
+// ENABLE / DISABLE USER
+app.put("/users/:id/status", async (req, res) => {
+  const { is_active } = req.body;
+  const userId = req.params.id;
+
+  try {
+    await pool.query(
+      "UPDATE users SET is_active=$1 WHERE user_id=$2",
+      [is_active, userId]
+    );
+
+    res.json({ message: "User status updated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error updating user status" });
+  }
+});
+
+
 /* =========================
    TEACHER – ASSIGNED STUDENTS
 ========================= */
@@ -187,6 +220,11 @@ app.post("/login", async (req, res) => {
     }
 
     const user = result.rows[0];
+	
+	if (user.is_active === false) {
+	  return res.status(403).json({ message: "User account is disabled" });
+	}
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
