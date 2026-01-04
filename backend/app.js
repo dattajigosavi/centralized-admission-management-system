@@ -381,6 +381,8 @@ app.get("/teacher/students", async (req, res) => {
    CALL UPDATE
 ========================= */
 app.post("/call-update", async (req, res) => {
+	console.log("CALL UPDATE BODY:", req.body);
+
   const { student_id, teacher, unit, call_status, remarks, address } = req.body;
 
   try {
