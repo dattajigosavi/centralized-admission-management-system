@@ -94,6 +94,62 @@ app.post("/students/import", upload.single("file"), async (req, res) => {
 });
 
 /* =========================
+   CSV IMPORT (Users)
+========================= */
+app.post("/users/import", upload.single("file"), async (req, res) => {
+  const users = [];
+
+  try {
+    fs.createReadStream(req.file.path)
+      .pipe(csv())
+      .on("data", (row) => users.push(row))
+      .on("end", async () => {
+        let inserted = 0;
+
+        for (const u of users) {
+          if (!u.username || !u.password || !u.role) continue;
+
+          const hashedPassword = await bcrypt.hash(u.password, 10);
+
+          await pool.query(
+            `
+            INSERT INTO users
+            (username, password, role, teacher_name, unit)
+            VALUES ($1,$2,$3,$4,$5)
+            ON CONFLICT (username) DO NOTHING
+            `,
+            [
+              u.username,
+              hashedPassword,
+              u.role,
+              u.teacher_name || null,
+              u.unit || null
+            ]
+          );
+
+          inserted++;
+        }
+
+        await logAudit(
+          "CSV_IMPORT_USERS",
+          "SUPER_ADMIN",
+          "SUPER_ADMIN",
+          `users:${inserted}`
+        );
+
+        res.json({
+          message: "Users imported successfully",
+          inserted
+        });
+      });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "User CSV import failed" });
+  }
+});
+
+
+/* =========================
    TEST ROUTE
 ========================= */
 app.get("/", (_, res) => {
