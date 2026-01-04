@@ -153,43 +153,76 @@ app.get("/call-logs", async (req, res) => {
 ========================= */
 app.get("/dashboard-summary", async (req, res) => {
   try {
-    const assignedRes = await pool.query("SELECT COUNT(*) FROM assignments");
-    const completedRes = await pool.query(
-      "SELECT COUNT(*) FROM call_logs WHERE call_status='Completed'"
+    // SUPER ADMIN METRICS
+    const totalStudentsRes = await pool.query(
+      "SELECT COUNT(*) FROM students"
     );
 
-    const totalAssigned = parseInt(assignedRes.rows[0].count);
-    const completedCalls = parseInt(completedRes.rows[0].count);
-    const pendingCalls = totalAssigned - completedCalls;
+    const completedStudentsRes = await pool.query(
+      "SELECT COUNT(*) FROM students WHERE status = 'Completed'"
+    );
 
+    const totalStudents = parseInt(totalStudentsRes.rows[0].count);
+    const completedStudents = parseInt(completedStudentsRes.rows[0].count);
+    const pendingStudents = totalStudents - completedStudents;
+
+    // UNIT SUMMARY
     const unitSummaryRes = await pool.query(`
-      SELECT unit,
-             COUNT(*) AS assigned,
-             COUNT(CASE WHEN call_status='Completed' THEN 1 END) AS completed
-      FROM assignments
-      LEFT JOIN call_logs USING (student_id, unit)
-      GROUP BY unit
+      SELECT 
+        a.unit,
+        COUNT(*) AS assigned,
+        COUNT(CASE WHEN s.status = 'Completed' THEN 1 END) AS completed
+      FROM assignments a
+      JOIN students s ON s.student_id = a.student_id
+      GROUP BY a.unit
     `);
 
+    // TEACHER SUMMARY (CURRENT ASSIGNMENTS)
     const teacherSummaryRes = await pool.query(`
-      SELECT teacher,
-             COUNT(*) AS assigned,
-             COUNT(CASE WHEN call_status='Completed' THEN 1 END) AS completed
-      FROM assignments
-      LEFT JOIN call_logs USING (student_id, teacher)
-      GROUP BY teacher
+      SELECT 
+        a.teacher,
+        COUNT(*) AS assigned,
+        COUNT(CASE WHEN s.status = 'Completed' THEN 1 END) AS completed
+      FROM assignments a
+      JOIN students s ON s.student_id = a.student_id
+      GROUP BY a.teacher
     `);
 
     res.json({
-      total_calls_assigned: totalAssigned,
-      calls_completed: completedCalls,
-      pending_calls: pendingCalls,
+      total_students: totalStudents,
+      completed_students: completedStudents,
+      pending_students: pendingStudents,
       unit_summary: unitSummaryRes.rows,
       teacher_summary: teacherSummaryRes.rows
     });
   } catch (err) {
     console.error(err);
-    res.status(500).send("Dashboard error");
+    res.status(500).json({ message: "Dashboard error" });
+  }
+});
+
+// TEACHER PERFORMANCE (LIFETIME)
+app.get("/teacher/performance/:teacher", async (req, res) => {
+  const teacher = req.params.teacher;
+
+  try {
+    const totalCallsRes = await pool.query(
+      "SELECT COUNT(DISTINCT student_id) FROM call_logs WHERE teacher = $1",
+      [teacher]
+    );
+
+    const completedCallsRes = await pool.query(
+      "SELECT COUNT(DISTINCT student_id) FROM call_logs WHERE teacher = $1 AND call_status = 'Completed'",
+      [teacher]
+    );
+
+    res.json({
+      total_called: parseInt(totalCallsRes.rows[0].count),
+      completed_by_me: parseInt(completedCallsRes.rows[0].count)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Performance error" });
   }
 });
 
