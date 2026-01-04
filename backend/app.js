@@ -6,6 +6,8 @@ const cors = require("cors");
 const bcrypt = require("bcrypt");
 const { Pool } = require("pg");
 
+
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -27,6 +29,24 @@ const pool = new Pool(
         port: 5432
       }
 );
+/* =========================
+   For log generation
+========================= */
+
+const logAudit = async (action, performedBy, role, target = null) => {
+  try {
+    await pool.query(
+      `
+      INSERT INTO audit_logs (action, performed_by, role, target)
+      VALUES ($1, $2, $3, $4)
+      `,
+      [action, performedBy, role, target]
+    );
+  } catch (err) {
+    console.error("Audit log error:", err);
+  }
+};
+
 
 /* =========================
    TEST ROUTE
@@ -181,6 +201,14 @@ app.put("/users/:id/status", async (req, res) => {
       [is_active, userId]
     );
 
+	await logAudit(
+	  is_active ? "ENABLE_USER" : "DISABLE_USER",
+	  "SUPER_ADMIN",
+	  "SUPER_ADMIN",
+	  `user_id:${userId}`
+	);
+
+
     res.json({ message: "User status updated" });
   } catch (err) {
     console.error(err);
@@ -208,10 +236,32 @@ app.put("/users/:id/reset-password", async (req, res) => {
       [hashedPassword, userId]
     );
 
+	await logAudit(
+	  "RESET_PASSWORD",
+	  "SUPER_ADMIN",
+	  "SUPER_ADMIN",
+	  `user_id:${userId}`
+	);
+
+
     res.json({ message: "Password reset successful" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Password reset failed" });
+  }
+});
+
+
+// GET AUDIT LOGS (SUPER ADMIN)
+app.get("/audit-logs", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 200"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error fetching audit logs" });
   }
 });
 
@@ -259,6 +309,14 @@ app.post("/call-update", async (req, res) => {
       "UPDATE students SET status = $1 WHERE student_id = $2",
       [call_status, student_id]
     );
+
+	await logAudit(
+	  "CALL_UPDATE",
+	  teacher,
+	  "TEACHER",
+	  `student_id:${student_id}`
+	);
+
 
     res.json({ message: "Call updated successfully" });
   } catch (err) {
@@ -319,7 +377,15 @@ app.post("/users", async (req, res) => {
       `,
       [username, hashedPassword, role, teacher_name || null, unit || null]
     );
+	
+	await logAudit(
+	  "CREATE_USER",
+	  "SUPER_ADMIN",
+	  "SUPER_ADMIN",
+	  username
+	);
 
+	
     res.json({ message: "User created successfully" });
   } catch (err) {
     console.error(err);
