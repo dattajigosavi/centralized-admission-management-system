@@ -139,6 +139,26 @@ app.put("/users/:id/status", async (req, res) => {
   const userId = req.params.id;
 
   try {
+    // Prevent disabling last SUPER_ADMIN
+    const adminCheck = await pool.query(
+      "SELECT COUNT(*) FROM users WHERE role='SUPER_ADMIN' AND is_active=true"
+    );
+
+    const targetUser = await pool.query(
+      "SELECT role FROM users WHERE user_id=$1",
+      [userId]
+    );
+
+    if (
+      targetUser.rows[0].role === "SUPER_ADMIN" &&
+      adminCheck.rows[0].count <= 1 &&
+      is_active === false
+    ) {
+      return res.status(400).json({
+        message: "Cannot disable the last active SUPER_ADMIN"
+      });
+    }
+
     await pool.query(
       "UPDATE users SET is_active=$1 WHERE user_id=$2",
       [is_active, userId]
@@ -150,6 +170,7 @@ app.put("/users/:id/status", async (req, res) => {
     res.status(500).json({ message: "Error updating user status" });
   }
 });
+
 
 
 /* =========================
