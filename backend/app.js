@@ -419,6 +419,51 @@ app.put("/admin/reassign-student", async (req, res) => {
   res.json({ success: true });
 });
 
+// SUPER ADMIN – UNASSIGNED STUDENTS
+app.get("/admin/unassigned-students", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT s.student_id, s.name, s.mobile, s.preferred_unit
+      FROM students s
+      LEFT JOIN assignments a ON a.student_id = s.student_id
+      WHERE a.student_id IS NULL
+    `);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json([]);
+  }
+});
+
+// SUPER ADMIN – ASSIGN STUDENT TO SUB ADMIN
+app.put("/admin/assign-to-subadmin", async (req, res) => {
+  const { student_id, unit, sub_admin, admin } = req.body;
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO assignments (student_id, unit, teacher)
+      VALUES ($1, $2, $3)
+      `,
+      [student_id, unit, sub_admin]
+    );
+
+    await logAudit(
+      "ASSIGN_TO_SUB_ADMIN",
+      admin,
+      "SUPER_ADMIN",
+      `student_id:${student_id} -> ${sub_admin}`
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Assignment failed" });
+  }
+});
+
+
 
 /* =========================
    SUPER ADMIN → SUB ADMIN ASSIGN
