@@ -454,14 +454,14 @@ app.get("/admin/unassigned-students", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-	   s.student_id,
-	   s.name,
-	   s.mobile,
-       s.preferred_unit
-	  FROM students s
-	  LEFT JOIN assignments a ON a.student_id = s.student_id
-	  WHERE a.assignment_id IS NULL
-	   OR a.assigned_to_role IS NULL
+		  s.student_id,
+		  s.name,
+		  s.mobile,
+		  s.preferred_unit
+		FROM students s
+		LEFT JOIN assignments a ON a.student_id = s.student_id
+		WHERE a.assignment_id IS NULL
+		   OR a.assigned_to_role <> 'SUB_ADMIN';
     `);
 
     res.json(result.rows);
@@ -551,32 +551,37 @@ app.post("/admin/assign-to-subadmin", async (req, res) => {
     );
 
     if (exists.rows.length === 0) {
-      // INSERT (fresh assignment)
-      await pool.query(`
+      // INSERT new assignment
+      await pool.query(
+        `
         INSERT INTO assignments
-        (student_id, unit, sub_admin, assigned_to_role, assigned_by_role, assigned_by)
+        (student_id, unit, teacher, assigned_to_role, assigned_by_role, assigned_by)
         VALUES ($1,$2,$3,'SUB_ADMIN','SUPER_ADMIN',$4)
-      `, [student_id, unit, sub_admin, admin]);
+        `,
+        [student_id, unit, sub_admin, admin]
+      );
     } else {
-      // UPDATE (fix broken / NULL assignment)
-      await pool.query(`
+      // UPDATE existing (even if NULL / broken)
+      await pool.query(
+        `
         UPDATE assignments
         SET
           unit = $1,
-          sub_admin = $2,
-          teacher = NULL,
+          teacher = $2,
           assigned_to_role = 'SUB_ADMIN',
           assigned_by_role = 'SUPER_ADMIN',
           assigned_by = $3
         WHERE student_id = $4
-      `, [unit, sub_admin, admin, student_id]);
+        `,
+        [unit, sub_admin, admin, student_id]
+      );
     }
 
     await logAudit(
       "ASSIGN_TO_SUB_ADMIN",
       admin,
       "SUPER_ADMIN",
-      `student_id:${student_id} → ${sub_admin}`
+      `student_id:${student_id} -> ${sub_admin}`
     );
 
     res.json({ success: true });
@@ -585,6 +590,7 @@ app.post("/admin/assign-to-subadmin", async (req, res) => {
     res.status(500).json({ message: "Assignment failed" });
   }
 });
+
 
 
 /* =========================
