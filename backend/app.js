@@ -68,17 +68,19 @@ app.post("/students/import", upload.single("file"), async (req, res) => {
           if (!row.name || !row.mobile) continue;
 
           await pool.query(
-            `
-            INSERT INTO students (name, mobile, address, preferred_unit)
-            VALUES ($1, $2, $3, $4)
-            `,
-            [
-              row.name,
-              row.mobile,
-              row.address || null,
-              row.preferred_unit || null
-            ]
-          );
+			  `
+			  INSERT INTO students (name, mobile, address, preferred_unit)
+			  VALUES ($1, $2, $3, $4)
+			  ON CONFLICT (mobile) DO NOTHING
+			  `,
+			  [
+				row.name,
+				row.mobile,
+				row.address || null,
+				row.preferred_unit || null
+			  ]
+		   );
+
         }
 
         await logAudit(
@@ -167,37 +169,59 @@ app.get("/", (_, res) => {
 ========================= */
 app.get("/dashboard-summary", async (_, res) => {
   try {
-    const totalRes = await pool.query("SELECT COUNT(*) FROM students");
-    const completedRes = await pool.query(
-      "SELECT COUNT(*) FROM students WHERE status='Completed'"
-    );
+    const totalAssignedRes = await pool.query(`
+	  SELECT COUNT(DISTINCT a.student_id)
+	  FROM assignments a
+	  WHERE a.unit IS NOT NULL
+	`);
+	
+    const completedAssignedRes = await pool.query(`
+	  SELECT COUNT(DISTINCT a.student_id)
+	  FROM assignments a
+	  JOIN students s ON s.student_id = a.student_id
+	  WHERE a.unit IS NOT NULL
+		AND s.status = 'Completed'
+	`);
+	const totalAssigned = Number(totalAssignedRes.rows[0].count);
+	const completedAssigned = Number(completedAssignedRes.rows[0].count);
+	const pendingAssigned = totalAssigned - completedAssigned;
+
 
     const unitSummary = await pool.query(`
-      SELECT a.unit,
-             COUNT(*) AS assigned,
-             COUNT(CASE WHEN s.status='Completed' THEN 1 END) AS completed
-      FROM assignments a
-      JOIN students s ON s.student_id = a.student_id
-      GROUP BY a.unit
-    `);
+	  SELECT 
+		a.unit,
+		COUNT(DISTINCT a.student_id) AS assigned,
+		COUNT(
+		  CASE WHEN s.status = 'Completed' THEN 1 END
+		) AS completed
+	  FROM assignments a
+	  JOIN students s ON s.student_id = a.student_id
+	  WHERE a.unit IS NOT NULL
+	  GROUP BY a.unit
+	`);
+
 
     const teacherSummary = await pool.query(`
-      SELECT a.teacher,
-             COUNT(*) AS assigned,
-             COUNT(CASE WHEN s.status='Completed' THEN 1 END) AS completed
-      FROM assignments a
-      JOIN students s ON s.student_id = a.student_id
-      GROUP BY a.teacher
+	  SELECT 
+		a.teacher,
+		COUNT(DISTINCT a.student_id) AS assigned,
+		COUNT(
+		  CASE WHEN s.status = 'Completed' THEN 1 END
+		) AS completed
+	  FROM assignments a
+	  JOIN students s ON s.student_id = a.student_id
+	  WHERE a.unit IS NOT NULL
+		AND a.teacher IS NOT NULL
+	  GROUP BY a.teacher
     `);
 
+
     res.json({
-      total_students: Number(totalRes.rows[0].count),
-      completed_students: Number(completedRes.rows[0].count),
-      pending_students:
-        Number(totalRes.rows[0].count) -
-        Number(completedRes.rows[0].count),
-      unit_summary: unitSummary.rows || [],
-      teacher_summary: teacherSummary.rows || []
+  total_students: totalAssigned,
+  completed_students: completedAssigned,
+  pending_students: pendingAssigned,
+  unit_summary: unitSummary.rows,
+  teacher_summary: teacherSummary.rows
     });
   } catch (err) {
     console.error(err);
