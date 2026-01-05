@@ -421,6 +421,33 @@ app.get("/admin/teachers-by-unit/:unit", async (req, res) => {
   res.json(result.rows || []);
 });
 
+/* =========================
+   SUPER ADMIN → SET INITIAL UNIT
+========================= */
+app.put("/admin/set-student-unit", async (req, res) => {
+  const { student_id, unit, admin } = req.body;
+
+  try {
+    await pool.query(
+      "UPDATE students SET preferred_unit = $1 WHERE student_id = $2",
+      [unit, student_id]
+    );
+
+    await logAudit(
+      "SET_INITIAL_UNIT",
+      admin,
+      "SUPER_ADMIN",
+      `student_id:${student_id} → ${unit}`
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Unit update failed" });
+  }
+});
+
+
 
 /* =========================
    GET SUB ADMINS BY UNIT
