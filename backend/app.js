@@ -453,10 +453,15 @@ app.put("/admin/reassign-student", async (req, res) => {
 app.get("/admin/unassigned-students", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT s.student_id, s.name, s.mobile, s.preferred_unit
-      FROM students s
-      LEFT JOIN assignments a ON a.student_id = s.student_id
-      WHERE a.student_id IS NULL
+      SELECT
+	   s.student_id,
+	   s.name,
+	   s.mobile,
+       s.preferred_unit
+	  FROM students s
+	  LEFT JOIN assignments a ON a.student_id = s.student_id
+	  WHERE a.assignment_id IS NULL
+	   OR a.assigned_to_role IS NULL
     `);
 
     res.json(result.rows);
