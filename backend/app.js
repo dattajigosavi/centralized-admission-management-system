@@ -397,6 +397,36 @@ app.get("/admin/teachers-by-unit/:unit", async (req, res) => {
   res.json(result.rows || []);
 });
 
+
+/* =========================
+   GET SUB ADMINS BY UNIT
+========================= */
+app.get("/admin/subadmins-by-unit/:unit", async (req, res) => {
+  const unit = req.params.unit;
+
+  try {
+    const result = await pool.query(
+      `
+      SELECT username
+      FROM users
+      WHERE role = 'SUB_ADMIN'
+        AND unit = $1
+        AND is_active = true
+      ORDER BY username
+      `,
+      [unit]
+    );
+
+    // Return array of usernames
+    res.json(result.rows.map(r => r.username));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error fetching sub admins" });
+  }
+});
+
+
+
 app.put("/admin/reassign-student", async (req, res) => {
   const { student_id, new_unit, new_teacher, admin } = req.body;
 
