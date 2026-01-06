@@ -67,11 +67,14 @@ app.post("/students/import", upload.single("file"), async (req, res) => {
         for (const row of results) {
           if (!row.name || !row.mobile) continue;
 
-          await pool.query(
+          const studentRes = await pool.query(
 			  `
 			  INSERT INTO students (name, mobile, address, preferred_unit)
 			  VALUES ($1, $2, $3, $4)
-			  ON CONFLICT (mobile) DO NOTHING
+			  ON CONFLICT (mobile)
+			  DO UPDATE SET
+				preferred_unit = COALESCE(EXCLUDED.preferred_unit, students.preferred_unit)
+			  RETURNING student_id
 			  `,
 			  [
 				row.name,
@@ -79,7 +82,47 @@ app.post("/students/import", upload.single("file"), async (req, res) => {
 				row.address || null,
 				row.preferred_unit || null
 			  ]
-		   );
+			);
+
+			const studentId = studentRes.rows[0].student_id;
+			
+			const assignmentRes = await pool.query(
+			  "SELECT assignment_id, unit FROM assignments WHERE student_id = $1",
+			  [studentId]
+			);
+			
+			// Determine unit for assignment
+			const unitToAssign = row.preferred_unit || null;
+
+			if (assignmentRes.rows.length === 0) {
+			  // 🔹 Fresh assignment
+			  await pool.query(
+				`
+				INSERT INTO assignments
+				(student_id, unit, assigned_to_role, assigned_by_role, assigned_by)
+				VALUES ($1, $2, 'SUPER_ADMIN', 'SYSTEM', 'CSV_IMPORT')
+				`,
+				[studentId, unitToAssign]
+			  );
+			} else {
+			  // 🔹 Fix broken / NULL assignment
+			  if (!assignmentRes.rows[0].unit && unitToAssign) {
+				await pool.query(
+				  `
+				  UPDATE assignments
+				  SET unit = $1,
+					  teacher = NULL,
+					  assigned_to_role = 'SUPER_ADMIN',
+					  assigned_by_role = 'SYSTEM',
+					  assigned_by = 'CSV_IMPORT'
+				  WHERE student_id = $2
+				  `,
+				  [unitToAssign, studentId]
+				);
+			  }
+			}
+
+
 
         }
 
