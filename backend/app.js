@@ -48,6 +48,7 @@ const logAudit = async (action, performedBy, role, target = null) => {
   }
 };
 
+
 /* =========================
    CSV IMPORT (STUDENTS)
 ========================= */
@@ -140,6 +141,82 @@ app.post("/students/import", upload.single("file"), async (req, res) => {
     res.status(500).json({ message: "CSV import failed" });
   }
 });
+
+
+
+/* =========================
+   AUTO ASSIGN TO SUB ADMINS (BULK)
+========================= */
+app.post("/admin/auto-assign-subadmins", async (req, res) => {
+  const { admin } = req.body;
+
+  try {
+    // 1️⃣ Fetch all students needing sub-admin assignment
+    const studentsRes = await pool.query(`
+      SELECT a.student_id, a.unit
+      FROM assignments a
+      WHERE a.unit IS NOT NULL
+        AND (a.assigned_to_role IS NULL OR a.assigned_to_role = 'SUPER_ADMIN')
+    `);
+
+    let assignedCount = 0;
+
+    for (const s of studentsRes.rows) {
+      // 2️⃣ Find sub admins for that unit
+      const subAdminsRes = await pool.query(
+        `
+        SELECT username
+        FROM users
+        WHERE role = 'SUB_ADMIN'
+          AND unit = $1
+        ORDER BY username
+        `,
+        [s.unit]
+      );
+
+      if (subAdminsRes.rows.length === 0) continue;
+
+      // 3️⃣ Simple round-robin assignment
+      const chosenSubAdmin =
+        subAdminsRes.rows[
+          assignedCount % subAdminsRes.rows.length
+        ].username;
+
+      // 4️⃣ Update assignment
+      await pool.query(
+        `
+        UPDATE assignments
+        SET
+          assigned_to_role = 'SUB_ADMIN',
+          assigned_by_role = 'SUPER_ADMIN',
+          assigned_by = $1,
+          teacher = NULL
+        WHERE student_id = $3
+        `,
+        [admin, s.student_id]
+      );
+
+      assignedCount++;
+    }
+
+    await logAudit(
+      "AUTO_ASSIGN_SUB_ADMINS",
+      admin,
+      "SUPER_ADMIN",
+      `assigned:${assignedCount}`
+    );
+
+    res.json({
+      success: true,
+      assigned: assignedCount
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Auto assignment failed" });
+  }
+});
+
+
 
 /* =========================
    CSV IMPORT (Users)
